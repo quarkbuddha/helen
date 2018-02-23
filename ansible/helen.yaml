@@ -1,0 +1,104 @@
+# Copyright 2018 Quarkbuddha Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
+# Start with Ubuntu Mate 17.10. Your initial user account on the VM
+# should have the same username use use on your usual machine.
+# apt-get install openssh-server aptitude
+# systemctl enable ssh
+# systemctl start ssh
+# ufw enable
+# ufw allow ssh
+# ufw allow 5355/udp
+# From the host you will run this playbook from, use ssh-copy-id to copy your ssh public key
+# Update helen_vars.yaml
+# Run the playbook with (hostname is the name of the host to configure):
+# ansible-playbook helen.yaml -i hostname, -K
+# Log in, passing -L 3000:localhost:3000 to ssh
+# cd helen/helen_on_rails
+# rm Gemfile.lock
+# bundle install --path vendor/bundle
+# rake db:create
+# rails server
+- name: configure helen vm
+  hosts: all
+  become: true
+  tasks:
+    - name: set local variables
+      include_vars:
+        file: helen_vars.yaml
+    - name: upgrade
+      apt:
+        update_cache: yes
+        upgrade: safe
+    - name: dist-upgrade
+      apt:
+        upgrade: dist
+    - name: needed packages
+      apt: name={{item}} state=present
+      with_items:
+        - autoconf
+        - gcc
+        - git
+        - libpq-dev
+        - libtool
+        - make
+        - postgresql
+        - python-psycopg2
+        - rails
+        - ruby-dev
+        - ruby-pg
+        - zlib1g-dev
+    - name: create helen_on_rails postgres user
+      become: yes
+      become_user: postgres
+      postgresql_user:
+        name: helen_on_rails
+        password: k3ll3r
+        role_attr_flags: CREATEDB,NOSUPERUSER
+    - name: create your postgres user
+      become: yes
+      become_user: postgres
+      postgresql_user:
+        name: "{{ helen_username }}"
+        password: NULL
+        role_attr_flags: CREATEDB,SUPERUSER
+    - name: set up git config and check out source
+      become_user: "{{ helen_username }}"
+      block:
+        - git_config:
+            name: user.name
+            scope: global
+            value: "{{ helen_name }}"
+        - git_config:
+            name: user.email
+            scope: global
+            value: "{{ helen_email }}"
+        - git:
+            repo: https://github.com/quarkbuddha/helen.git
+            dest: "{{ ('~' + helen_username + '/helen' ) | expanduser }}"
+            update: no
+    - name: Reboot if necessary
+      shell: ( /bin/sleep 5 ; shutdown -r now "Ansible updates triggered" ) &
+      args:
+        removes: /var/run/reboot-required
+      async: 30
+      poll: 0
+      ignore_errors: true
+      notify:
+        - waiting for server to come back
+  handlers:
+    - name: waiting for server to come back
+      local_action: wait_for host={{ inventory_hostname }} port=22 state=started delay=10 timeout=60
+      become: no
