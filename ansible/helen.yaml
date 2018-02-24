@@ -22,12 +22,11 @@
 # ufw allow ssh
 # ufw allow 5355/udp
 # From the host you will run this playbook from, use ssh-copy-id to copy your ssh public key
-# Update helen_vars.yaml
+# Update helen_vars.yaml and helen_prefs.yaml
 # Run the playbook with (hostname is the name of the host to configure):
 # ansible-playbook helen.yaml -i hostname, -K
 # Log in, passing -L 3000:localhost:3000 to ssh
 # cd helen/helen_on_rails
-# rm Gemfile.lock
 # bundle install --path vendor/bundle
 # rake db:create
 # rails server
@@ -52,6 +51,7 @@
         - gcc
         - git
         - libpq-dev
+        - libsqlite3-dev
         - libtool
         - make
         - postgresql
@@ -60,6 +60,20 @@
         - ruby-dev
         - ruby-pg
         - zlib1g-dev
+    - name: install nokogiri and mini_portile2 which nokogiri needs for some reason
+      block:
+        - gem:
+            name: mini_portile2
+            state: present
+            version: 2.2.0
+            user_install: no
+        - gem:
+            name: nokogiri
+            state: present
+            version: 1.8.0
+            user_install: no
+    - name: gem pristine --all
+      command: gem pristine --all creates="{{ ('~' + helen_username + '/helen/helen_on_rails/vendor/bundle' ) | expanduser }}"
     - name: create helen_on_rails postgres user
       become: yes
       become_user: postgres
@@ -89,6 +103,7 @@
             repo: https://github.com/quarkbuddha/helen.git
             dest: "{{ ('~' + helen_username + '/helen' ) | expanduser }}"
             update: no
+    - include: helen_prefs.yaml
     - name: Reboot if necessary
       shell: ( /bin/sleep 5 ; shutdown -r now "Ansible updates triggered" ) &
       args:
