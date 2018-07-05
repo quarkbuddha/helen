@@ -13,7 +13,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
-# Start with Ubuntu Mate 17.10. Your initial user account on the VM
+# Start with Ubuntu Mate 18.04. Your initial user account on the VM
 # should have the same username use use on your usual machine.
 # apt-get install openssh-server aptitude
 # systemctl enable ssh
@@ -25,7 +25,7 @@
 # Update helen_vars.yaml and helen_prefs.yaml
 # Run the playbook with (hostname is the name of the host to configure):
 # ansible-playbook helen.yaml -i hostname, -K
-# Log in, passing -L 3000:localhost:3000 to ssh
+# Log in, passing -L 3000:localhost:3000 -L 8000:localhost:8000 to ssh
 # cd helen/helen_on_rails
 # bundle install --path vendor/bundle
 # rake db:create
@@ -37,6 +37,15 @@
     - name: set local variables
       include_vars:
         file: helen_vars.yaml
+    - name: fix rubygems ip issue
+      blockinfile:
+        name: /etc/gai.conf
+        block: |
+          # Low precedence for api.rubygems.org IPv6 addresses.
+          precedence  2a04:4e42::514/128      5
+          precedence  2a04:4e42:200::514/128  5
+          precedence  2a04:4e42:400::514/128  5
+          precedence  2a04:4e42:600::514/128  5
     - name: upgrade
       apt:
         update_cache: yes
@@ -80,7 +89,8 @@
       postgresql_user:
         name: helen_on_rails
         password: k3ll3r
-        role_attr_flags: CREATEDB,NOSUPERUSER
+        encrypted: yes
+        role_attr_flags: CREATEDB,SUPERUSER
     - name: create your postgres user
       become: yes
       become_user: postgres
