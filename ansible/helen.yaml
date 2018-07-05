@@ -42,10 +42,10 @@
         name: /etc/gai.conf
         block: |
           # Low precedence for api.rubygems.org IPv6 addresses.
-          precedence  2a04:4e42::514/128      5
-          precedence  2a04:4e42:200::514/128  5
-          precedence  2a04:4e42:400::514/128  5
-          precedence  2a04:4e42:600::514/128  5
+          precedence  2a04:4e42::70/128      5
+          precedence  2a04:4e42:200::70/128  5
+          precedence  2a04:4e42:400::70/128  5
+          precedence  2a04:4e42:600::70/128  5
     - name: upgrade
       apt:
         update_cache: yes
