@@ -4,4 +4,12 @@
     name: color.ui
     scope: global
     value: false
+- name: don't colorize ansible
+  become_user: "{{ helen_username }}"
+  blockinfile:
+    path: ~/.ansible.cfg
+    create: yes
+    block: |
+      [defaults]
+      nocolor=true
     

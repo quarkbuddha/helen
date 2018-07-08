@@ -29,6 +29,7 @@
 # cd helen/helen_on_rails
 # bundle install --path vendor/bundle
 # rake db:create
+# rake db:migrate
 # rails server
 - name: configure helen vm
   hosts: all
@@ -53,22 +54,36 @@
     - name: dist-upgrade
       apt:
         upgrade: dist
+    - name: install openjdk 8 first
+      apt: name=openjdk-8-jdk-headless state=present
     - name: needed packages
       apt: name={{item}} state=present
       with_items:
         - autoconf
         - gcc
         - git
+        - gradle
         - libpq-dev
         - libsqlite3-dev
         - libtool
         - make
+        - npm
         - postgresql
         - python-psycopg2
+        - qemu-system-common
         - rails
         - ruby-dev
         - ruby-pg
         - zlib1g-dev
+- name: even more configure helen vm
+  hosts: all
+  become: true
+  tasks:
+    - name: groups
+      user:
+        name: hermit
+        groups: kvm
+        append: yes
     - name: install nokogiri and mini_portile2 which nokogiri needs for some reason
       block:
         - gem:
@@ -83,6 +98,10 @@
             user_install: no
     - name: gem pristine --all
       command: gem pristine --all creates="{{ ('~' + helen_username + '/helen/helen_on_rails/vendor/bundle' ) | expanduser }}"
+    - name: install cordova for helen_in_pocket
+      npm:
+        name: cordova
+        global: yes
     - name: create helen_on_rails postgres user
       become: yes
       become_user: postgres
@@ -98,6 +117,17 @@
         name: "{{ helen_username }}"
         password: NULL
         role_attr_flags: CREATEDB,SUPERUSER
+    - name: dir for android sdk
+      file:
+        path: "{{ ('~' + helen_username + '/android-sdk' ) | expanduser }}"
+        state: directory
+        owner: "{{ helen_username }}"
+    - name: get android sdk
+      unarchive:
+        remote_src: yes
+        src: https://dl.google.com/android/repository/sdk-tools-linux-4333796.zip
+        dest: "{{ ('~' + helen_username + '/android-sdk' ) | expanduser }}"
+        owner: "{{ helen_username }}"
     - name: set up git config and check out source
       become_user: "{{ helen_username }}"
       block:
@@ -113,6 +143,15 @@
             repo: https://github.com/quarkbuddha/helen.git
             dest: "{{ ('~' + helen_username + '/helen' ) | expanduser }}"
             update: no
+        - shell: echo y | ~/android-sdk/tools/bin/sdkmanager 'build-tools;28.0.1'
+          register: sdkmanager
+        - debug: msg="{{ sdkmanager.stdout }}"
+        - debug: msg="{{ sdkmanager.stderr }}"
+        - shell: echo y | ~/android-sdk/tools/bin/sdkmanager 'system-images;android-26;google_apis_playstore;x86'
+          register: sdkmanager
+        - debug: msg="{{ sdkmanager.stdout }}"
+        - debug: msg="{{ sdkmanager.stderr }}"
+        - shell: echo no | ~/android-sdk/tools/bin/avdmanager create avd -n helen -k 'system-images;android-26;google_apis_playstore;x86'
     - include: helen_prefs.yaml
     - name: Reboot if necessary
       shell: ( /bin/sleep 5 ; shutdown -r now "Ansible updates triggered" ) &
@@ -127,3 +166,4 @@
     - name: waiting for server to come back
       local_action: wait_for host={{ inventory_hostname }} port=22 state=started delay=10 timeout=60
       become: no
+      
